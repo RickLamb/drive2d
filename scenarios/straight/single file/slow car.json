@@ -1,0 +1,15 @@
+{
+	name: "slow car in lane",
+	vehicles: [
+		{
+
+		},
+		{
+
+		}
+	],
+	maps: {
+		driveable: "",
+		lane: ""
+	}
+}

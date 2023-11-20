@@ -44,7 +44,9 @@ public:
         m_apex = Add(Mult(m_a.velocity, m_a.bias), Mult(m_b.velocity, m_b.bias));
         Vec2D offset = Sub(m_b.position, m_a.position);
         float dist = Length(offset);
-        float coneAngle = asinf((m_a.radius + m_b.radius) / dist);
+        float r = (m_a.radius + m_b.radius);
+        assert(r < dist);
+        float coneAngle = asinf(r / dist);
         Vec2D leftEdge = RotateRadians(offset, -coneAngle);
         m_leftEdgeDir = Normalize(leftEdge);
         Vec2D rightEdge = RotateRadians(offset, coneAngle);
@@ -235,7 +237,7 @@ void drawTriangle(const VelocityObstacle& vo)
             float xf = float(x) + 0.5f;
             float yf = float(y) + 0.5f;
 
-            if (e0.test(x, y) && e1.test(x, y) && e2.test(x, y)) {
+            if (e0.test(xf, yf) && e1.test(xf, yf) && e2.test(xf, yf)) {
                 int iX = x + kHalfRange;
                 int iY = y + kHalfRange;
                 //int rint = r.evaluate(x, y) * 255;

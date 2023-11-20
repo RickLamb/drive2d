@@ -22,6 +22,9 @@
 #endif
 #include <GLFW/glfw3.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "sim.h"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -36,6 +39,52 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
+static int mini(int x, int y)
+{
+    return x < y ? x : y;
+}
+
+static int maxi(int x, int y)
+{
+    return x > y ? x : y;
+}
+
+GLFWmonitor* get_current_monitor(GLFWwindow* window)
+{
+    int nmonitors, i;
+    int wx, wy, ww, wh;
+    int mx, my, mw, mh;
+    int overlap, bestoverlap;
+    GLFWmonitor* bestmonitor;
+    GLFWmonitor** monitors;
+    const GLFWvidmode* mode;
+
+    bestoverlap = 0;
+    bestmonitor = NULL;
+
+    glfwGetWindowPos(window, &wx, &wy);
+    glfwGetWindowSize(window, &ww, &wh);
+    monitors = glfwGetMonitors(&nmonitors);
+
+    for (i = 0; i < nmonitors; i++) {
+        mode = glfwGetVideoMode(monitors[i]);
+        glfwGetMonitorPos(monitors[i], &mx, &my);
+        mw = mode->width;
+        mh = mode->height;
+
+        overlap =
+            maxi(0, mini(wx + ww, mx + mw) - maxi(wx, mx)) *
+            maxi(0, mini(wy + wh, my + mh) - maxi(wy, my));
+
+        if (bestoverlap < overlap) {
+            bestoverlap = overlap;
+            bestmonitor = monitors[i];
+        }
+    }
+
+    return bestmonitor;
+}
+
 // Main code
 int main(int, char**)
 {
@@ -43,8 +92,21 @@ int main(int, char**)
     if (!glfwInit())
         return 1;
 
+    const bool bFullscreen = false;
+    // pass primary monitor to enable fullscreen mode
+
+
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(800, 800, "Dear ImGui GLFW+OpenGL2 example", nullptr, nullptr);
+    int width = 1280;
+    int height = 720;
+    GLFWmonitor* primary = nullptr;
+    if (bFullscreen) {
+        primary = glfwGetPrimaryMonitor();
+        width = 1920;
+        height = 1080;
+    }
+
+    GLFWwindow* window = glfwCreateWindow(width, height, "Dear ImGui GLFW+OpenGL2 example", primary, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
@@ -89,9 +151,10 @@ int main(int, char**)
     //glShadeModel(GL_SMOOTH);                        // Enable Smooth Shading
 
     std::unique_ptr<Simulator> sim = std::make_unique<Simulator>();
+    bool bQuit = false;
 
     // Main loop
-    while (!glfwWindowShouldClose(window))
+    while (!bQuit && !glfwWindowShouldClose(window))
     {
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -104,6 +167,8 @@ int main(int, char**)
         ImGui_ImplOpenGL2_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+        sim->Update();
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         //if (show_demo_window)
@@ -123,10 +188,17 @@ int main(int, char**)
             ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
             ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
 
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            if (ImGui::Button("Button")) {                            // Buttons return true when clicked (most widgets return true when edited/activated)
                 counter++;
+            }
+
             ImGui::SameLine();
             ImGui::Text("counter = %d", counter);
+
+
+            if (ImGui::Button("Quit")) {                            // Buttons return true when clicked (most widgets return true when edited/activated)
+                bQuit = true;
+            }
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
@@ -142,22 +214,30 @@ int main(int, char**)
             ImGui::End();
         }
 
+        // clear display for next frame
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
 
+
+        // set camera
+        // TODO: follow vehicle 0
+        float ratio = float(width) / float(height);
+        const float halfCamWidth = 50.0f; // TODO: define from scenario
+        const float halfCamHeight = halfCamWidth / ratio; // metres
+        const float camPosX = sim->m_vehicles[0].m_pos.x;
+        const float camPosY = sim->m_vehicles[0].m_pos.y;
+
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
-        float horizontalDistance = 100.0f; // metres
-        float verticalDistance = 100.0f; // metres
-        glOrtho(-0.5f*horizontalDistance, 0.5f*horizontalDistance, -0.5f*verticalDistance, 0.5f*verticalDistance, 0.0f, 1.0f);
+        glOrtho(camPosX-halfCamWidth, camPosX+halfCamWidth, camPosY-halfCamHeight, camPosY+halfCamHeight, 0.0f, 1.0f);
 
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
 
-        sim->Update();
+        sim->Render();
 
         // Rendering
         ImGui::Render();
